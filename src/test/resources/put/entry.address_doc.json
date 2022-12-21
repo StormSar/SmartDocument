@@ -1,0 +1,33 @@
+{
+  "number": 25554151,
+  "entry": {
+    "name": "gvsgshshaDGBSBS",
+    "age": 105,
+    "address": {
+      "doc": "doc"
+    }
+  },
+  "empty": {
+
+  },
+  "array": [
+    {
+      "name": "first",
+      "value": "test"
+    },
+    {},
+    {
+      "name": "array",
+      "value": [
+        {
+          "data": "1",
+          "value": "test1"
+        },
+        {
+          "data": "2",
+          "value": "test1"
+        }
+      ]
+    }
+  ]
+}

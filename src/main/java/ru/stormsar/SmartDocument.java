@@ -4,112 +4,195 @@ import com.sun.org.slf4j.internal.Logger;
 import com.sun.org.slf4j.internal.LoggerFactory;
 import org.bson.Document;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class SmartDocument {
     private static final Logger LOG = LoggerFactory.getLogger(SmartDocument.class);
 
-    public static <T> Object getValue(Document document, String path, Class<T> clazz) {
-        List<String> fields = new ArrayList<>();
-        fields.addAll(Arrays.asList(path.split("\\.")));
-        return find(document, fields, clazz);
+    public static Document remove(Document document, String path) {
+        pathFinder(document, new Path(path), null, Action.REMOVE);
+        return document;
     }
 
-    public static Object getValue(Document document, String path) {
-        return getValue(document, path, Object.class);
+    public static Document put(Document document, String path, Object value) {
+        pathFinder(document, new Path(path), value, Action.PUT);
+        return document;
     }
 
-    private static <T> Object find(Object entity, List<String> fields, Class<T> clazz) {
-        return find(entity, fields, -1, clazz);
+    public static <T> T get(Document document, String path, Class<T> clazz) {
+        Object fined = pathFinder(document, new Path(path), null, Action.GET);
+        try {
+            return clazz.cast(fined);
+        } catch (Throwable t) {
+            LOG.warn("Cast Error: " + t.getLocalizedMessage());
+        }
+        return null;
     }
 
-    private static <T> Object find(Object entity, List<String> fields, int level, Class<T> clazz) {
-        level++;
-        String key = "";
+    public static Object get(Document document, String path) {
+        return pathFinder(document, new Path(path), null, Action.GET);
+    }
 
-        if (fields.size() > level) {
-            key = fields.get(level);
+    private static Object createValueWithPath(Path path, Object value) {
+        String key = path.getKey();
+        path.incrementLevel();
+
+        int index = path.tryCastKeyAsIndex();
+
+        if (index >= 0 || key.equals("[]")) {
+            List<Object> newList = new ArrayList<>();
+            newList.add(value);
+            return createValueWithPath(path, newList);
+        } else {
+            if (key.isEmpty())
+                return value;
+            Document newDoc = new Document(key, value);
+            return createValueWithPath(path, newDoc);
         }
 
-        try {
+    }
 
-            if (key.isEmpty()) {
-                try {
-                    clazz.cast(entity);
+    private static Object pathFinder(Object entity, Path path, Object value, Action action) {
+        if (entity instanceof Document) {
+            return forDocument((Document) entity, path, value, action);
+        } else if (entity instanceof List) {
+            return forList((List) entity, path, value, action);
+        } else
+            return forValue(entity, path, value, action);
+    }
+
+    private enum Action {
+        GET,
+        PUT,
+        REMOVE
+    }
+
+    private static Object forDocument(Document entity, Path path, Object value, Action action) {
+        String key = path.getKey();
+        path.incrementLevel();
+        Object entry = entity.get(key);
+
+        switch (action) {
+            case GET:
+                if (key.isEmpty())
                     return entity;
-                } catch (Throwable t) {
-                    throw new Exception(String.format("Can't cast '%s': %s", markPathField(fields, level), t.getLocalizedMessage()));
-                }
-            }
+                return pathFinder(entry, path, value, action);
+            case PUT:
 
-            if (entity instanceof Document) {
-                Object entry = ((Document) entity).get(key);
-                return find(entry, fields, level, clazz);
-
-            } else if (entity instanceof List) {
-
-                List<Object> listEntry = new ArrayList<>();
-
-                int index = tryCastKeyAsIndex(key);
-
-                if (index < 0) {
-                    level--;
-                    int finalLevel = level;
-
-                    AtomicBoolean isAlwaysNull = new AtomicBoolean(true);
-                    ((List<?>) entity).forEach(e -> {
-                        Object result = find(e, fields, finalLevel, clazz);
-                        if (result != null)
-                            isAlwaysNull.set(false);
-                        listEntry.add(result);
-                    });
-
-                    if (isAlwaysNull.get())
-                        return null;
-                    else
-                        return listEntry;
+                if (entry == null) {
+                    return entity.append(key, createValueWithPath(path.discardPath(true), value));
                 } else {
-                    if (((List<?>) entity).size() > index) {
-                        return find(((List<?>) entity).get(index), fields, level, clazz);
-                    } else
+                    if (path.getKey().isEmpty())
+                        return entity.append(key, value);
+                    else {
+                        pathFinder(entry, path, value, action);
                         return null;
+                    }
                 }
+            case REMOVE:
+                if (path.getKey().isEmpty())
+                    return entity.remove(key);
+                else
+                    return pathFinder(entry, path, value, action);
+        }
 
-            } else {
-                if (entity == null)
+        return null;
+    }
+
+    private static Object forValue(Object entity, Path path, Object value, Action action) {
+        String key = path.getKey();
+        path.incrementLevel();
+
+
+        switch (action) {
+            case GET:
+                if (!key.isEmpty())
+                    return null;
+                return entity;
+            case PUT:
+                if (path.getKey().isEmpty()) {
+                    return value;
+                } else {
+                    createValueWithPath(path.discardPath(true), value);
+                }
+                break;
+            case REMOVE:
+                if (path.getKey().isEmpty())
                     return null;
                 else
-                    throw new Exception(String.format("The item '%s' not Collection or Document", markPathField(fields, level)));
-            }
-        } catch (Exception t) {
-            LOG.warn(t.getLocalizedMessage());
-            t.printStackTrace();
-            return null;
+                    return entity;
         }
+        return null;
     }
 
-    private static int tryCastKeyAsIndex(String key) {
-        int index = -1;
+    private static Object forList(List<Object> entity, Path path, Object value, Action action) {
+        String key = path.getKey();
+        int index = path.tryCastKeyAsIndex();
+        path.incrementLevel();
 
-        try {
-            index = Integer.parseInt(key);
-        } catch (Throwable ignored) {
+        switch (action) {
+            case GET:
 
+                if (key.isEmpty())
+                    return entity;
+                if (index >= 0) {
+                    if (index < entity.size()) {
+                        return pathFinder(entity.get(index), path, value, action);
+                    } else {
+                        return null;
+                    }
+                } else {
+                    path.decrement();
+
+                    AtomicBoolean isAlwaysNull = new AtomicBoolean(true);
+                    List<Object> entry = new ArrayList<>();
+                    entity.forEach(e -> {
+                        Object element = pathFinder(e, path.discardPath(false), value, action);
+                        if (element != null)
+                            isAlwaysNull.set(false);
+                        entry.add(element);
+                    });
+
+                    if (isAlwaysNull.get()) {
+                        return null;
+                    } else {
+                        return entry;
+                    }
+                }
+
+            case PUT:
+
+                if (key.isEmpty()) {
+                    return value;
+                }
+                if (key.equals("[]")) {
+                    entity.forEach(e -> pathFinder(e, path.discardPath(false), value, action));
+                    return null;
+                }
+                if (index >= 0 && index < entity.size()) {
+                    return pathFinder(entity.get(index), path, value, action);
+                } else {
+                    if (index < 0)
+                        path.decrement();
+                    entity.add(createValueWithPath(path.discardPath(true), value));
+                    return null;
+                }
+
+            case REMOVE:
+                if (index >= 0 && index < entity.size()) {
+                    if (path.getKey().isEmpty())
+                        entity.remove(index);
+                    else {
+                        pathFinder(entity.get(index), path.discardPath(false), value, action);
+                    }
+                    return entity;
+                } else {
+                    if (index < 0)
+                        path.decrement();
+                    entity.forEach(e -> pathFinder(e, path.discardPath(false), value, action));
+                }
         }
-
-        return index;
-    }
-
-    private static String markPathField(List<String> fields, int level) {
-        StringBuilder markedPath = new StringBuilder();
-        if (level >= fields.size())
-            level = fields.size() - 1;
-        fields.add(level, "<" + fields.get(level) + ">");
-        fields.remove(level + 1);
-        fields.forEach(f -> markedPath.append(".").append(f));
-        return markedPath.toString().replaceFirst("\\.", "");
+        return null;
     }
 }
