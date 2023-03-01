@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-public class Path {
+class Path {
     private int level = 0;
     private String key = "";
 
