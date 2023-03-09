@@ -19,6 +19,16 @@ public class SmartDocumentEmtyTest {
         tool.getValue(null, "entry.array", int.class);
 
         tool.getValue(null, "array.2.value.data1", String.class);
+
+        String testString = "тестовая строка";
+        tool.getOptionalValue(testString, "array.2.value.data1", testString);
+
+        tool.getOptionalValue(testString, "array.2.value.data1", String.class, testString);
+
+        int testInt = 61351354;
+        tool.getOptionalValue(testInt, "array.2.value.data1", testInt);
+
+        tool.getOptionalValue(testInt, "array.2.value.data1", int.class, testInt);
     }
 
     @Test

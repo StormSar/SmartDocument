@@ -45,10 +45,28 @@ public class TestsTool {
         System.out.println("\u001B[32m" + "Complete" + "\u001B[0m");
     }
 
+    public <T> void getOptionalValue(T value, String getPath, T newValue) {
+        System.out.printf("Test_%s - ", ++testCount);
+
+        T out = (T) SmartDocument.getOptional(inDoc, getPath).orElse(newValue);
+        assertEquals(out, value);
+
+        System.out.println("\u001B[32m" + "Complete" + "\u001B[0m");
+    }
+
     public <T> void getValue(T value, String getPath) {
         System.out.printf("Test_%s - ", ++testCount);
 
         T out = (T) SmartDocument.get(inDoc, getPath);
+        assertEquals(out, value);
+
+        System.out.println("\u001B[32m" + "Complete" + "\u001B[0m");
+    }
+
+    public <T> void getOptionalValue(Object value, String getPath, Class<T> clazz, T newValue) {
+        System.out.printf("Test_%s - ", ++testCount);
+
+        T out = SmartDocument.getOptional(inDoc, getPath, clazz).orElse(newValue);
         assertEquals(out, value);
 
         System.out.println("\u001B[32m" + "Complete" + "\u001B[0m");

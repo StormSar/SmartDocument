@@ -20,6 +20,10 @@ public class SmartDocument {
         return document;
     }
 
+    public static <T> Optional<T> getOptional(Document document, String path, Class<T> clazz) {
+        return Optional.ofNullable(get(document, path, clazz));
+    }
+
     public static <T> T get(Document document, String path, Class<T> clazz) {
         Object fined = pathFinder(document, new Path(path), null, Action.GET);
         try {
@@ -28,6 +32,10 @@ public class SmartDocument {
             LOG.warn("Cast Error: " + t.getLocalizedMessage());
         }
         return null;
+    }
+
+    public static Optional<Object> getOptional(Document document, String path) {
+        return Optional.ofNullable(get(document, path));
     }
 
     public static Object get(Document document, String path) {
